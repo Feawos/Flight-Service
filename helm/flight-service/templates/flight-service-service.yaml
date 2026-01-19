@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flight-service
+spec:
+  selector:
+    app: flight-service
+  type: {{ .Values.flightService.service.type }}
+  ports:
+    - port: {{ .Values.flightService.service.port }}
+      targetPort: {{ .Values.flightService.service.port }}
+      {{- if .Values.flightService.service.nodePort }}
+      nodePort: {{ .Values.flightService.service.nodePort }}
+      {{- end }}

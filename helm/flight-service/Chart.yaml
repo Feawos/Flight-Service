@@ -1,0 +1,8 @@
+apiVersion: v2
+name: flight-stack
+description: Flight Services microservices stack
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+

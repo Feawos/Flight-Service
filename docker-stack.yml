@@ -1,0 +1,102 @@
+﻿version: "3.9"
+
+networks:
+  flight-net:
+    driver: overlay
+
+configs:
+  logstash_pipeline:
+    file: ./logstash/logstash.conf
+
+services:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.17
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    networks:
+      - flight-net
+    ports:
+      - "9200:9200"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.17
+    configs:
+      - source: logstash_pipeline
+        target: /usr/share/logstash/pipeline/logstash.conf
+    environment:
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+    networks:
+      - flight-net
+    ports:
+      - "5000:5000"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.17
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - flight-net
+    ports:
+      - "5601:5601"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  mysql:
+    image: mysql:8.0
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: flightdb
+      MYSQL_USER: flightuser
+      MYSQL_PASSWORD: flightpass
+      MYSQL_ROOT_PASSWORD: root
+    networks:
+      - flight-net
+    ports:
+      - "3306:3306"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  flight-service:
+    image: flightservices-flight-service:latest
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=flightdb
+      - DB_USERNAME=flightuser
+      - DB_PASSWORD=flightpass
+      - LOGSTASH_HOST=flightstack_logstash
+      - LOGSTASH_PORT=5000
+    networks:
+      - flight-net
+    ports:
+      - "8080:8080"
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+
+volumes:
+  mysql-data:
+

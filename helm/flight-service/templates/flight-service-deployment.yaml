@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flight-service
+  labels:
+    app: flight-service
+spec:
+  replicas: {{ .Values.flightService.replicas }}
+  selector:
+    matchLabels:
+      app: flight-service
+  template:
+    metadata:
+      labels:
+        app: flight-service
+    spec:
+
+      # --- BLOCK STARTUP UNTIL MYSQL IS READY ---
+      initContainers:
+        - name: wait-for-mysql
+          image: mysql:8.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MySQL..."
+              until mysqladmin ping \
+                -h {{ .Values.mysql.host | default "mysql" }} \
+                -P {{ .Values.mysql.service.port }} \
+                -u{{ .Values.mysql.username }} \
+                -p{{ .Values.mysql.password }} --silent; do
+                sleep 5
+              done
+              echo "MySQL is ready"
+
+      containers:
+        - name: flight-service
+          image: "{{ .Values.flightService.image.repository }}:{{ .Values.flightService.image.tag }}"
+          imagePullPolicy: {{ .Values.flightService.image.pullPolicy }}
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+
+            - name: DB_HOST
+              value: mysql
+            - name: DB_PORT
+              value: "{{ .Values.mysql.service.port }}"
+            - name: DB_NAME
+              value: {{ .Values.mysql.database }}
+            - name: DB_USERNAME
+              value: {{ .Values.mysql.username }}
+            - name: DB_PASSWORD
+              value: {{ .Values.mysql.password }}
+
+            - name: LOGSTASH_HOST
+              value: logstash
+            - name: LOGSTASH_PORT
+              value: "{{ .Values.logstash.service.port }}"
+
+          # --- APP READINESS (TRAFFIC GATING) ---
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          # --- OPTIONAL BUT RECOMMENDED ---
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
